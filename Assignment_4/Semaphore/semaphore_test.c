@@ -2,7 +2,7 @@
 #include "kernel/stat.h"
 #include "kernel/user.h"
 #include "kernel/fs.h"
-#include "kernell/fcntl.h"
+#include "kernel/fcntl.h"
 
 #define NUM_CHILDREN 2
 #define TARGET_COUNT_PER_CHILD 50
