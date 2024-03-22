@@ -1,0 +1,254 @@
+diff --git a/Makefile b/Makefile
+index 39a99d7..79a1a36 100644
+--- a/Makefile
++++ b/Makefile
+@@ -132,6 +132,8 @@ UPROGS=\
+ 	$U/_grind\
+ 	$U/_wc\
+ 	$U/_zombie\
++	$U/_semaphore_test\
++
+ 
+ fs.img: mkfs/mkfs README $(UPROGS)
+ 	mkfs/mkfs fs.img README $(UPROGS)
+diff --git a/kernel/defs.h b/kernel/defs.h
+index a3c962b..6787898 100644
+--- a/kernel/defs.h
++++ b/kernel/defs.h
+@@ -107,6 +107,11 @@ int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
+ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
+ void            procdump(void);
+ 
++int             sem_init(int, int);
++int             sem_destroy(int);
++int             sem_wait(int, int);
++int             sem_signal(int, int);
++
+ // swtch.S
+ void            swtch(struct context*, struct context*);
+ 
+diff --git a/kernel/proc.c b/kernel/proc.c
+index 959b778..5e8f2ea 100644
+--- a/kernel/proc.c
++++ b/kernel/proc.c
+@@ -29,6 +29,13 @@ struct spinlock wait_lock;
+ // Allocate a page for each process's kernel stack.
+ // Map it high in memory, followed by an invalid
+ // guard page.
++struct semaphore {
++  int value;
++  int active;
++  struct spinlock lock;
++};
++
++struct semaphore sema[32];
+ void
+ proc_mapstacks(pagetable_t kpgtbl)
+ {
+@@ -651,10 +658,73 @@ either_copyin(void *dst, int user_src, uint64 src, uint64 len)
+     return 0;
+   }
+ }
++int 
++sem_init(int sem, int value)
++{
++  acquire(&sema[sem].lock);
++
++  if (sema[sem].active == 0)
++  {
++     sema[sem].active = 1;
++     sema[sem].value = value;
++  }
++  else
++  {
++     return -1;
++  }  
++
++  release(&sema[sem].lock);
++
++  return 0;
++}
++
++
++int 
++sem_destroy(int sem)
++{
++  acquire(&sema[sem].lock);
++  sema[sem].active = 0;
++  release(&sema[sem].lock);
++
++  return 0; 
++}
++
++int 
++sem_wait(int sem, int count)
++{
++  acquire(&sema[sem].lock);
++
++  if (sema[sem].value >= count)
++  {
++     sema[sem].value = sema[sem].value - count;
++  }
++  else
++  {
++     while (sema[sem].value < count)
++     {  
++        sleep(&sema[sem],&sema[sem].lock);
++     }
++     sema[sem].value = sema[sem].value - count;
++  }
++
++  release(&sema[sem].lock);
++
++  return 0;
++}
++
++
++int 
++sem_signal(int sem, int count)
++{
++  acquire(&sema[sem].lock);
++
++  sema[sem].value = sema[sem].value + count;
++  wakeup(&sema[sem]); 
++  release(&sema[sem].lock);
++
++  return 0;
++}
+ 
+-// Print a process listing to console.  For debugging.
+-// Runs when user types ^P on console.
+-// No lock to avoid wedging a stuck machine further.
+ void
+ procdump(void)
+ {
+diff --git a/kernel/syscall.c b/kernel/syscall.c
+index ed65409..68d24e0 100644
+--- a/kernel/syscall.c
++++ b/kernel/syscall.c
+@@ -102,6 +102,11 @@ extern uint64 sys_link(void);
+ extern uint64 sys_mkdir(void);
+ extern uint64 sys_close(void);
+ 
++extern uint64 sys_sem_init(void);
++extern uint64 sys_sem_destroy(void);
++extern uint64 sys_sem_wait(void); 
++extern uint64 sys_sem_signal(void);
++
+ // An array mapping syscall numbers from syscall.h
+ // to the function that handles the system call.
+ static uint64 (*syscalls[])(void) = {
+@@ -126,6 +131,12 @@ static uint64 (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++
++[SYS_sem_init]  sys_sem_init,
++[SYS_sem_destroy] sys_sem_destroy,
++[SYS_sem_wait]  sys_sem_wait,
++[SYS_sem_signal] sys_sem_signal,
++
+ };
+ 
+ void
+diff --git a/kernel/syscall.h b/kernel/syscall.h
+index bc5f356..fede3a9 100644
+--- a/kernel/syscall.h
++++ b/kernel/syscall.h
+@@ -20,3 +20,8 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++
++#define SYS_sem_init 22
++#define SYS_sem_destroy 23
++#define SYS_sem_wait 24
++#define SYS_sem_signal 25
+diff --git a/kernel/sysproc.c b/kernel/sysproc.c
+index 1de184e..7eac61e 100644
+--- a/kernel/sysproc.c
++++ b/kernel/sysproc.c
+@@ -89,3 +89,55 @@ sys_uptime(void)
+   release(&tickslock);
+   return xticks;
+ }
++
++int 
++sys_sem_init(void)
++{
++  int sem;
++  int value;
++
++  argint(0,&sem); 
++  //return -1;
++  argint(1,&value);
++  //return -1;
++
++  return sem_init(sem, value);
++}
++
++int
++sys_sem_destroy(void)
++{
++  int sem;
++
++  argint(0,&sem);
++    //return -1;
++
++  return sem_destroy(sem);
++}
++
++int sys_sem_wait(void)
++{
++  int sem;
++  int count;
++
++  argint(0,&sem);
++   // return -1;
++  argint(1,&count);
++   // return -1;
++
++  return sem_wait(sem, count);
++}
++
++int sys_sem_signal(void)
++{
++  int sem;
++  int count;
++
++  argint(0,&sem);
++   // return -1;
++  argint(1,&count);
++   // return -1;
++
++  return sem_signal(sem, count);
++}
++
+diff --git a/user/user.h b/user/user.h
+index 4d398d5..ca7622c 100644
+--- a/user/user.h
++++ b/user/user.h
+@@ -39,3 +39,8 @@ void free(void*);
+ int atoi(const char*);
+ int memcmp(const void *, const void *, uint);
+ void *memcpy(void *, const void *, uint);
++
++int sem_init(int sem, int value);
++int sem_destroy(int sem);
++int sem_wait(int sem, int count);
++int sem_signal(int sem, int count);
+\ No newline at end of file
+diff --git a/user/usys.pl b/user/usys.pl
+index 01e426e..8f3b090 100755
+--- a/user/usys.pl
++++ b/user/usys.pl
+@@ -36,3 +36,9 @@ entry("getpid");
+ entry("sbrk");
+ entry("sleep");
+ entry("uptime");
++
++entry("sem_init");
++entry("sem_destroy");
++entry("sem_wait"); 
++entry("sem_signal");
++

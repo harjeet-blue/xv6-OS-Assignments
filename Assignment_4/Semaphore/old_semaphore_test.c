@@ -1,6 +1,6 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
-#include "user/user.h"
+#include "kernel/user.h"
 #include "kernel/fs.h"
 #include "kernel/fcntl.h"
 
@@ -14,11 +14,11 @@ int counter_init(char *filename, int value)
 	int fd;
 
 	if ((fd = open(filename, O_CREATE | O_RDWR)) < 0) {
-		fprintf(1, "counter_init: error initializing file: %s\n", filename);
-		exit(-1);
+		printf(1, "counter_init: error initializing file: %s\n", filename);
+		exit();
 	}
 
-	fprintf(fd, "%d\n", value);
+	printf(fd, "%d\n", value);
 	close(fd);
 
 	return 0;
@@ -30,8 +30,8 @@ int counter_get(char *filename)
 	char buffer[32];
 
 	if ((fd = open(filename, O_CREATE | O_RDWR)) < 0) {
-		fprintf(1, "counter_get: error opening file: %s\n", filename);
-		exit(-1);
+		printf(1, "counter_get: error opening file: %s\n", filename);
+		exit();
 	}
 
 	n = read(fd, buffer, 31);
@@ -47,11 +47,11 @@ int counter_set(char *filename, int value)
 	int fd;
 
 	if ((fd = open(filename, O_CREATE | O_RDWR)) < 0) {
-		fprintf(1, "counter_set: error opening file: %s\n", filename);
-		exit(-1);
+		printf(1, "counter_set: error opening file: %s\n", filename);
+		exit();
 	}
 
-	fprintf(fd, "%d\n", value);
+	printf(fd, "%d\n", value);
 	close(fd);
 
 	return value;
@@ -62,7 +62,7 @@ void child(void)
 	int i;
 	int counter;
 
-	fprintf(1, "Process started...\n");
+	printf(1, "Process started...\n");
 	sleep(10);
 
 	for (i=0; i<TARGET_COUNT_PER_CHILD; i++) {
@@ -75,7 +75,7 @@ void child(void)
 		sem_signal(SEMAPHORE_NUM, 1);
 	}
 
-	exit(-1);
+	exit();
 }
 
 int main(int argc, char **argv)
@@ -93,16 +93,16 @@ int main(int argc, char **argv)
 	// Initialize semaphore to 1
 	if (sem_init(SEMAPHORE_NUM, sem_size) < 0)
 	{
-		fprintf(1, "main: error initializing semaphore %d\n", SEMAPHORE_NUM);
-		exit(-1);
+		printf(1, "main: error initializing semaphore %d\n", SEMAPHORE_NUM);
+		exit();
 	}
 
-	fprintf(1, "main: initialized semaphore %d to %d\n", SEMAPHORE_NUM, sem_size);
-    
+	printf(1, "main: initialized semaphore %d to %d\n", SEMAPHORE_NUM, sem_size);
+
 	// Initialize counter
 	counter_init(COUNTER_FILE, 0);
 
-	fprintf(1, "Running with %d processes...\n", NUM_CHILDREN);
+	printf(1, "Running with %d processes...\n", NUM_CHILDREN);
 
 	// Start all children
 	for (i=0; i<NUM_CHILDREN; i++) {
@@ -110,23 +110,23 @@ int main(int argc, char **argv)
 		if (pid == 0)
 			child();
 	}
-	int wt;
+	
 	// Wait for all children
 	for (i=0; i<NUM_CHILDREN; i++) {
-		wait(&wt);
+		wait();
 	}
 
 	// Check the result
 	final_counter = counter_get(COUNTER_FILE);
-	fprintf(1, "Final counter is %d, target is %d\n", final_counter, final_target);
+	printf(1, "Final counter is %d, target is %d\n", final_counter, final_target);
 	if (final_counter == final_target)
-		fprintf(1, "TEST PASSED!\n");
+		printf(1, "TEST PASSED!\n");
 	else
-		fprintf(1, "TEST FAILED!\n");
+		printf(1, "TEST FAILED!\n");
 	
 	// Clean up semaphore
 	sem_destroy(SEMAPHORE_NUM);
 	
 	// Exit
-	return 1;
+	exit();
 }
