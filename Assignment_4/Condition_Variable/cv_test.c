@@ -11,9 +11,9 @@ int main() {
  if(pid < 0) {
  fprintf(1, "Error forking first child.\n");
  } else if (pid == 0) {
- sleep(5);
+
  fprintf(1, "Child 1 Executing\n");
- 
+ sleep(5);
  cv_signal(1);
  
  } else {
@@ -34,6 +34,7 @@ int main() {
  fprintf(1, "Children completed\n");
  fprintf(1, "Parent Executing\n");
  fprintf(1, "Parent exiting.\n");
+ cv_destroy(1)
  }
  }
  exit(1);
