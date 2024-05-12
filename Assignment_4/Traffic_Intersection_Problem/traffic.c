@@ -1,22 +1,6 @@
 /*
- * traffic.c
- *
- * 09-2015: KMS: created
- *
- */
-
-
-/*
- *  CS350 Students Note!
- *
- *  You may not modify the code in this file in any way!
- *
- */
-
-
-/*
  * 
- * Includes
+ * Not to be modified by sudents
  *
  */
 
